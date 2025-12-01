@@ -1,5 +1,4 @@
 from modules.voice_recognition import recognize_voice
-from modules.command_parser import parse_command
 from modules.serial_controller import SerialController
 from modules.sensor_manager import SensorManager
 from modules.device_controller import DeviceController
