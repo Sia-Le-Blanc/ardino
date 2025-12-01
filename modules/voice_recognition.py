@@ -170,13 +170,19 @@ class VoiceRecognizer:
             print(f"[GEMINI ERROR] {e}")
             return "UNKNOWN"
 
+# 전역 변수로 한 번만 생성
+_voice_recognizer = None
+
 def recognize_voice() -> Optional[str]:
     """메인 음성 인식 루프"""
-    voice = VoiceRecognizer()
+    global _voice_recognizer
     
-    if voice.listen_continuous():
-        user_command = voice.listen_for_command()
+    if _voice_recognizer is None:
+        _voice_recognizer = VoiceRecognizer()
+    
+    if _voice_recognizer.listen_continuous():
+        user_command = _voice_recognizer.listen_for_command()
         if user_command:
-            return voice.interpret_with_gemini(user_command)
+            return _voice_recognizer.interpret_with_gemini(user_command)
     
     return None

@@ -1,56 +1,66 @@
+# modules/device_controller.py
+
 class DeviceController:
     def __init__(self, serial_controller):
         self.serial = serial_controller
-        self.device_status = {
-            "light": "UNKNOWN",  # 실제 상태 알 수 없음
-            "humidifier": "OFF", 
-            "ac": "OFF",
-            "led": "OFF"
+        self.ac_state = False
+        self.hum_state = False
+    
+    def light_on(self):
+        """조명 켜기 - 서보모터 90도"""
+        self.serial.send_servo(90)
+        self.serial.send_buzzer(523)  # 도 음
+        print("💡 조명 ON")
+    
+    def light_off(self):
+        """조명 끄기 - 서보모터 0도"""
+        self.serial.send_servo(0)
+        self.serial.send_buzzer(0)
+        print("💡 조명 OFF")
+    
+    def ac_on(self):
+        """에어컨 켜기 - RGB 빨강"""
+        self.serial.send_rgb(255, 0, 0)
+        self.ac_state = True
+        print("❄️ 에어컨 ON")
+    
+    def ac_off(self):
+        """에어컨 끄기"""
+        self._update_rgb()
+        self.ac_state = False
+        print("❄️ 에어컨 OFF")
+    
+    def hum_on(self):
+        """가습기 켜기 - RGB 초록"""
+        self.serial.send_rgb(0, 255, 0)
+        self.hum_state = True
+        print("💧 가습기 ON")
+    
+    def hum_off(self):
+        """가습기 끄기"""
+        self._update_rgb()
+        self.hum_state = False
+        print("💧 가습기 OFF")
+    
+    def led_on(self):
+        """상태등 켜기 - RGB 파랑"""
+        self.serial.send_rgb(0, 0, 255)
+        print("🔵 상태등 ON")
+    
+    def led_off(self):
+        """상태등 끄기"""
+        self._update_rgb()
+        print("🔵 상태등 OFF")
+    
+    def _update_rgb(self):
+        """현재 상태에 맞게 RGB 업데이트"""
+        r = 255 if self.ac_state else 0
+        g = 255 if self.hum_state else 0
+        self.serial.send_rgb(r, g, 0)
+    
+    def get_states(self):
+        """현재 상태 반환"""
+        return {
+            'ac': self.ac_state,
+            'hum': self.hum_state
         }
-
-    def execute(self, command):
-        """기기 제어 명령 실행"""
-        if command == "LIGHT_ON":
-            self.serial.send("LIGHT_ON")
-            # 상태 추적 안함 (실제 상태 알 수 없음)
-            print("[DEVICE] 조명 스위치 ON 방향 작동")
-            
-        elif command == "LIGHT_OFF":
-            self.serial.send("LIGHT_OFF")
-            # 상태 추적 안함
-            print("[DEVICE] 조명 스위치 OFF 방향 작동")
-            
-        elif command == "HUM_ON":
-            self.serial.send("HUM_ON")
-            self.device_status["humidifier"] = "ON"
-            print("[DEVICE] 가습기 켜짐")
-            
-        elif command == "HUM_OFF":
-            self.serial.send("HUM_OFF")
-            self.device_status["humidifier"] = "OFF"
-            print("[DEVICE] 가습기 꺼짐")
-            
-        elif command == "AC_ON":
-            self.serial.send("AC_ON")
-            self.device_status["ac"] = "ON"
-            print("[DEVICE] 에어컨 켜짐")
-            
-        elif command == "AC_OFF":
-            self.serial.send("AC_OFF")
-            self.device_status["ac"] = "OFF"
-            print("[DEVICE] 에어컨 꺼짐")
-            
-        elif command == "LED_ON":
-            self.serial.send("LED_ON")
-            self.device_status["led"] = "ON"
-            
-        elif command == "LED_OFF":
-            self.serial.send("LED_OFF")
-            self.device_status["led"] = "OFF"
-            
-        else:
-            print(f"[DEVICE] 알 수 없는 명령: {command}")
-
-    def get_status(self):
-        """현재 기기 상태 반환"""
-        return self.device_status.copy()
