@@ -1,4 +1,4 @@
-# modules/sensor_manager.py 수정본
+# modules/sensor_manager.py 수정본 (DHT11 타이밍 개선)
 
 import time
 
@@ -9,18 +9,28 @@ class SensorManager:
         self.humidity = None
         self.error_count = 0
         self.max_errors = 5
+        self.last_read_time = 0
+        self.min_read_interval = 2.0  # DHT11 최소 읽기 간격 2초
     
     def update(self):
-        """센서 데이터 업데이트 (main.py에서 주기 관리)"""
+        """센서 데이터 업데이트 (DHT11 타이밍 준수)"""
+        current_time = time.time()
+        
+        # 최소 읽기 간격 확인
+        if current_time - self.last_read_time < self.min_read_interval:
+            return
+        
+        self.last_read_time = current_time
+        
         try:
-            # 온도 요청 및 응답 대기
+            # 온도 요청 및 응답 대기 (1초)
             self.serial.request_temperature()
-            time.sleep(0.3)
+            time.sleep(1.0)
             response = self.serial.get_response()
             if response and "TEMPERATURE=" in response:
                 try:
                     temp = float(response.split("=")[1])
-                    if -50 <= temp <= 100:  # 온도 범위 검증
+                    if -50 <= temp <= 100:
                         self.temperature = temp
                         self.error_count = 0
                     else:
@@ -29,14 +39,14 @@ class SensorManager:
                     self.error_count += 1
                     print(f"⚠️ 온도 파싱 실패: {response}")
             
-            # 습도 요청 및 응답 대기
+            # 습도 요청 및 응답 대기 (1초)
             self.serial.request_humidity()
-            time.sleep(0.3)
+            time.sleep(1.0)
             response = self.serial.get_response()
             if response and "HUMIDITY=" in response:
                 try:
                     hum = float(response.split("=")[1])
-                    if 0 <= hum <= 100:  # 습도 범위 검증
+                    if 0 <= hum <= 100:
                         self.humidity = hum
                         self.error_count = 0
                     else:
