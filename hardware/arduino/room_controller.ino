@@ -1,19 +1,19 @@
-// hardware/arduino/room_controller.ino 수정본
+// hardware/arduino/room_controller.ino 수정본 (실습 코드 핀 번호에 맞춤)
 
 #include <DHT.h>
 #include <Servo.h>
 #include <TM1637Display.h>
 
-// 핀 정의
+// 핀 정의 (실습 코드와 동일하게)
 #define DHT_PIN 2
 #define DHT_TYPE DHT11
-#define SERVO_PIN 9
-#define RGB_R 8
-#define RGB_G 7
-#define RGB_B 13
-#define BUZZER_PIN 6
-#define TM_CLK 4
-#define TM_DIO 5
+#define SERVO_PIN 8
+#define RGB_R 5
+#define RGB_G 6
+#define RGB_B 11
+#define BUZZER_PIN 3
+#define TM_CLK 9
+#define TM_DIO 10
 
 // 객체 초기화
 DHT dht(DHT_PIN, DHT_TYPE);
@@ -90,6 +90,9 @@ void executeCommand(String cmd) {
     if (!isnan(temp)) {
       Serial.print("TEMPERATURE=");
       Serial.println(temp);
+    } else {
+      Serial.print("TEMPERATURE=");
+      Serial.println(0);
     }
   }
   else if (cmd == "HUMIDITY=?") {
@@ -97,6 +100,9 @@ void executeCommand(String cmd) {
     if (!isnan(hum)) {
       Serial.print("HUMIDITY=");
       Serial.println(hum);
+    } else {
+      Serial.print("HUMIDITY=");
+      Serial.println(0);
     }
   }
 }
