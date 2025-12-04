@@ -1,21 +1,24 @@
-# modules/serial_controller.py
+# modules/serial_controller.py 수정본
 
 import serial
 import serial.tools.list_ports
 import time
 import threading
 from datetime import datetime
+from queue import Queue
 
 class SerialController:
     def __init__(self, port=None):
         self.serial = None
         self.test_mode = False
-        self.receive_data = ""
+        self.response_queue = Queue()
+        self.is_connected = False
         
         if port:
             try:
                 self.serial = serial.Serial(port, baudrate=9600, timeout=1.0)
                 time.sleep(2.0)
+                self.is_connected = True
                 print(f"✓ {port} 포트에 연결되었습니다.")
                 
                 t1 = threading.Thread(target=self._read_thread)
@@ -32,6 +35,7 @@ class SerialController:
                     try:
                         self.serial = serial.Serial(p.device, baudrate=9600, timeout=1.0)
                         time.sleep(2.0)
+                        self.is_connected = True
                         print(f"✓ {p.device} 포트에 연결되었습니다.")
                         
                         t1 = threading.Thread(target=self._read_thread)
@@ -46,18 +50,35 @@ class SerialController:
             self.test_mode = True
     
     def _read_thread(self):
+        """스레드 안전한 데이터 읽기"""
         while True:
-            if self.serial:
-                read_data = self.serial.readline()
-                if read_data:
-                    self.receive_data = read_data.decode().strip()
+            try:
+                if self.serial and self.is_connected:
+                    read_data = self.serial.readline()
+                    if read_data:
+                        decoded = read_data.decode().strip()
+                        self.response_queue.put(decoded)
+            except serial.SerialException as e:
+                print(f"✗ 시리얼 연결 끊김: {e}")
+                self.is_connected = False
+                break
+            except Exception as e:
+                print(f"✗ 읽기 오류: {e}")
+                time.sleep(0.1)
     
     def send_command(self, command):
+        """명령 전송 (예외 처리 포함)"""
         if self.test_mode:
             print(f"[TEST] 전송: {command}")
         else:
-            if self.serial:
-                self.serial.write(f"{command}\n".encode())
+            if self.serial and self.is_connected:
+                try:
+                    self.serial.write(f"{command}\n".encode())
+                except serial.SerialException as e:
+                    print(f"✗ 전송 실패: {e}")
+                    self.is_connected = False
+                except Exception as e:
+                    print(f"✗ 명령 전송 오류: {e}")
     
     def send_rgb(self, r, g, b):
         self.send_command(f"RGB={r},{g},{b}")
@@ -71,7 +92,7 @@ class SerialController:
     def send_time(self):
         """현재 시간을 TM1637에 전송"""
         now = datetime.now()
-        time_value = now.hour * 100 + now.minute  # 예: 14:30 → 1430
+        time_value = now.hour * 100 + now.minute
         self.send_command(f"TIME={time_value}")
     
     def request_temperature(self):
@@ -83,10 +104,20 @@ class SerialController:
         time.sleep(0.2)
     
     def get_response(self):
-        data = self.receive_data
-        self.receive_data = ""
-        return data
+        """큐에서 응답 가져오기 (스레드 안전)"""
+        try:
+            if not self.response_queue.empty():
+                return self.response_queue.get()
+        except Exception as e:
+            print(f"✗ 응답 읽기 오류: {e}")
+        return ""
     
     def close(self):
+        """시리얼 연결 종료"""
         if self.serial:
-            self.serial.close()
+            try:
+                self.is_connected = False
+                self.serial.close()
+                print("✓ 시리얼 연결 종료")
+            except Exception as e:
+                print(f"✗ 종료 오류: {e}")

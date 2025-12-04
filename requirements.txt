@@ -1,6 +1,7 @@
 pyserial>=3.5
 SpeechRecognition>=3.10.0
-google-generativeai>=0.3.0
+google-generativeai>=0.8.0
 sounddevice>=0.4.6
 scipy>=1.11.0
 numpy>=1.24.0
+PyAudio>=0.2.13
