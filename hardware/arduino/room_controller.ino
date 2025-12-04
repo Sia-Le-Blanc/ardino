@@ -1,87 +1,93 @@
+// room_controller.ino
+
 #include <DHT.h>
 #include <Servo.h>
+#include <TM1637Display.h>
 
 // 핀 정의
 #define DHT_PIN 2
 #define DHT_TYPE DHT11
 #define SERVO_PIN 9
-#define RELAY_HUMIDIFIER 7
-#define RELAY_AC 8
-#define LED_PIN 13
+#define RGB_R 8
+#define RGB_G 7
+#define RGB_B 13
+#define BUZZER_PIN 6
+#define TM_CLK 4
+#define TM_DIO 5
 
 // 객체 초기화
 DHT dht(DHT_PIN, DHT_TYPE);
 Servo lightServo;
+TM1637Display display(TM_CLK, TM_DIO);
 
 void setup() {
   Serial.begin(9600);
   dht.begin();
   lightServo.attach(SERVO_PIN);
+  display.setBrightness(0x0f);
   
-  pinMode(RELAY_HUMIDIFIER, OUTPUT);
-  pinMode(RELAY_AC, OUTPUT);
-  pinMode(LED_PIN, OUTPUT);
+  pinMode(RGB_R, OUTPUT);
+  pinMode(RGB_G, OUTPUT);
+  pinMode(RGB_B, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
   
-  // 초기 상태 (릴레이 OFF)
-  digitalWrite(RELAY_HUMIDIFIER, LOW);
-  digitalWrite(RELAY_AC, LOW);
+  setRGB(0, 0, 0);
+  noTone(BUZZER_PIN);
   
   Serial.println("Arduino Ready");
 }
 
 void loop() {
-  // 센서 데이터 읽기 및 전송
-  sendSensorData();
-  
-  // Python 명령 수신
   if (Serial.available()) {
     String command = Serial.readStringUntil('\n');
     command.trim();
     executeCommand(command);
   }
   
-  delay(1000);
-}
-
-void sendSensorData() {
-  float temp = dht.readTemperature();
-  float hum = dht.readHumidity();
-  
-  if (!isnan(temp) && !isnan(hum)) {
-    Serial.print("TEMP:");
-    Serial.print(temp);
-    Serial.print(",HUM:");
-    Serial.println(hum);
-  }
+  delay(50);
 }
 
 void executeCommand(String cmd) {
-  if (cmd == "LIGHT_ON") {
-    lightServo.write(180); // 스위치 ON 위치
-    delay(500);
-    lightServo.write(90);  // 중립 위치
+  if (cmd.startsWith("RGB=")) {
+    int r, g, b;
+    sscanf(cmd.c_str(), "RGB=%d,%d,%d", &r, &g, &b);
+    setRGB(r, g, b);
   }
-  else if (cmd == "LIGHT_OFF") {
-    lightServo.write(0);   // 스위치 OFF 위치
-    delay(500);
-    lightServo.write(90);  // 중립 위치
+  else if (cmd.startsWith("SERVO=")) {
+    int degree = cmd.substring(6).toInt();
+    lightServo.write(degree);
   }
-  else if (cmd == "HUM_ON") {
-    digitalWrite(RELAY_HUMIDIFIER, HIGH);
+  else if (cmd.startsWith("BUZZER=")) {
+    int freq = cmd.substring(7).toInt();
+    if (freq > 0) {
+      tone(BUZZER_PIN, freq);
+    } else {
+      noTone(BUZZER_PIN);
+    }
   }
-  else if (cmd == "HUM_OFF") {
-    digitalWrite(RELAY_HUMIDIFIER, LOW);
+  else if (cmd.startsWith("TIME=")) {
+    // Python에서 "TIME=1430" 형식으로 전송 (14:30)
+    int timeValue = cmd.substring(5).toInt();
+    display.showNumberDecEx(timeValue, 0b01000000, true);
   }
-  else if (cmd == "AC_ON") {
-    digitalWrite(RELAY_AC, HIGH);
+  else if (cmd == "TEMPERATURE=?") {
+    float temp = dht.readTemperature();
+    if (!isnan(temp)) {
+      Serial.print("TEMPERATURE=");
+      Serial.println(temp);
+    }
   }
-  else if (cmd == "AC_OFF") {
-    digitalWrite(RELAY_AC, LOW);
+  else if (cmd == "HUMIDITY=?") {
+    float hum = dht.readHumidity();
+    if (!isnan(hum)) {
+      Serial.print("HUMIDITY=");
+      Serial.println(hum);
+    }
   }
-  else if (cmd == "LED_ON") {
-    digitalWrite(LED_PIN, HIGH);
-  }
-  else if (cmd == "LED_OFF") {
-    digitalWrite(LED_PIN, LOW);
-  }
+}
+
+void setRGB(int r, int g, int b) {
+  analogWrite(RGB_R, r);
+  analogWrite(RGB_G, g);
+  analogWrite(RGB_B, b);
 }

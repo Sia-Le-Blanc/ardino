@@ -1,5 +1,3 @@
-# main.py
-
 import time
 from modules.serial_controller import SerialController
 from modules.voice_recognition import VoiceRecognizer
@@ -9,10 +7,9 @@ from modules.automation import Automation
 from modules.time_manager import TimeManager
 
 def main():
-    # 초기화
     print("=== 스마트홈 시스템 시작 ===")
     
-    serial = SerialController()  # 자동 포트 찾기
+    serial = SerialController()
     voice = VoiceRecognizer()
     device = DeviceController(serial)
     sensor = SensorManager(serial)
@@ -20,9 +17,15 @@ def main():
     time_manager = TimeManager(device)
     
     last_status_time = time.time()
+    last_time_update = time.time()
     
     try:
         while True:
+            # 1분마다 시간 업데이트
+            if time.time() - last_time_update > 60:
+                serial.send_time()
+                last_time_update = time.time()
+            
             # 음성 명령 감지
             if voice.listen_for_trigger():
                 print("\n🎤 음성 명령을 말씀하세요...")
@@ -31,7 +34,6 @@ def main():
                 if command:
                     print(f"✓ 인식된 명령: {command}")
                     
-                    # 명령 실행
                     if command == "LIGHT_ON":
                         device.light_on()
                     elif command == "LIGHT_OFF":
