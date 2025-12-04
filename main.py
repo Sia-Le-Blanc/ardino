@@ -1,3 +1,5 @@
+# main.py
+
 import time
 from modules.serial_controller import SerialController
 from modules.voice_recognition import VoiceRecognizer

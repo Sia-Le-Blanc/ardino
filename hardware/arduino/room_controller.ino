@@ -1,4 +1,4 @@
-// room_controller.ino
+// hardware/arduino/room_controller.ino
 
 #include <DHT.h>
 #include <Servo.h>
@@ -66,7 +66,6 @@ void executeCommand(String cmd) {
     }
   }
   else if (cmd.startsWith("TIME=")) {
-    // Python에서 "TIME=1430" 형식으로 전송 (14:30)
     int timeValue = cmd.substring(5).toInt();
     display.showNumberDecEx(timeValue, 0b01000000, true);
   }

@@ -1,3 +1,5 @@
+# modules/serial_controller.py
+
 import serial
 import serial.tools.list_ports
 import time
