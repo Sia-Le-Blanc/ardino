@@ -57,6 +57,7 @@ class SerialController:
                     read_data = self.serial.readline()
                     if read_data:
                         decoded = read_data.decode().strip()
+                        print(f"[DEBUG] 수신: {decoded}")  # 디버그 출력 추가
                         self.response_queue.put(decoded)
             except serial.SerialException as e:
                 print(f"✗ 시리얼 연결 끊김: {e}")
@@ -67,13 +68,14 @@ class SerialController:
                 time.sleep(0.1)
     
     def send_command(self, command):
-        """명령 전송 (예외 처리 포함)"""
+        """명령 전송"""
         if self.test_mode:
             print(f"[TEST] 전송: {command}")
         else:
             if self.serial and self.is_connected:
                 try:
                     self.serial.write(f"{command}\n".encode())
+                    print(f"[DEBUG] 전송: {command}")  # 디버그 출력 추가
                 except serial.SerialException as e:
                     print(f"✗ 전송 실패: {e}")
                     self.is_connected = False
@@ -97,20 +99,18 @@ class SerialController:
     
     def request_temperature(self):
         self.send_command("TEMPERATURE=?")
-        time.sleep(0.2)
     
     def request_humidity(self):
         self.send_command("HUMIDITY=?")
-        time.sleep(0.2)
     
     def get_response(self):
-        """큐에서 응답 가져오기 (스레드 안전)"""
+        """큐에서 응답 가져오기"""
         try:
             if not self.response_queue.empty():
                 return self.response_queue.get()
         except Exception as e:
             print(f"✗ 응답 읽기 오류: {e}")
-        return ""
+        return None
     
     def close(self):
         """시리얼 연결 종료"""
