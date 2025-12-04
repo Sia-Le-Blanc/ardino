@@ -1,4 +1,4 @@
-# modules/serial_controller.py 수정본
+# modules/serial_controller.py 수정본 (큐 쌓임 방지)
 
 import serial
 import serial.tools.list_ports
@@ -57,8 +57,9 @@ class SerialController:
                     read_data = self.serial.readline()
                     if read_data:
                         decoded = read_data.decode().strip()
-                        print(f"[DEBUG] 수신: {decoded}")  # 디버그 출력 추가
-                        self.response_queue.put(decoded)
+                        # 센서 응답만 큐에 저장
+                        if "TEMPERATURE=" in decoded or "HUMIDITY=" in decoded:
+                            self.response_queue.put(decoded)
             except serial.SerialException as e:
                 print(f"✗ 시리얼 연결 끊김: {e}")
                 self.is_connected = False
@@ -75,7 +76,6 @@ class SerialController:
             if self.serial and self.is_connected:
                 try:
                     self.serial.write(f"{command}\n".encode())
-                    print(f"[DEBUG] 전송: {command}")  # 디버그 출력 추가
                 except serial.SerialException as e:
                     print(f"✗ 전송 실패: {e}")
                     self.is_connected = False
@@ -104,10 +104,13 @@ class SerialController:
         self.send_command("HUMIDITY=?")
     
     def get_response(self):
-        """큐에서 응답 가져오기"""
+        """큐에서 응답 가져오기 (최신 데이터 우선)"""
         try:
-            if not self.response_queue.empty():
-                return self.response_queue.get()
+            # 큐에 쌓인 오래된 데이터 모두 버리고 최신만 가져오기
+            response = None
+            while not self.response_queue.empty():
+                response = self.response_queue.get()
+            return response
         except Exception as e:
             print(f"✗ 응답 읽기 오류: {e}")
         return None

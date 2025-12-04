@@ -116,9 +116,10 @@ def main():
                 last_status_print = current_time
             
             time.sleep(0.1)
-    
+
     except KeyboardInterrupt:
         print("\n\n=== 시스템 종료 ===")
+        time_manager.shutdown()  # 추가
         voice_thread.stop()
         serial.close()
 
