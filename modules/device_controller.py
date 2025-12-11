@@ -1,6 +1,7 @@
 # modules/device_controller.py 수정본
 
 import threading
+import time
 
 class DeviceController:
     def __init__(self, serial_controller):
@@ -14,13 +15,17 @@ class DeviceController:
         """조명 켜기 - 서보모터 90도"""
         with self.lock:
             self.serial.send_servo(90)
+            time.sleep(0.5)
             self.serial.send_buzzer(523)
+            time.sleep(0.3)
+            self.serial.send_buzzer(0)
             print("💡 조명 ON")
     
     def light_off(self):
         """조명 끄기 - 서보모터 0도"""
         with self.lock:
             self.serial.send_servo(0)
+            time.sleep(0.5)
             self.serial.send_buzzer(0)
             print("💡 조명 OFF")
     

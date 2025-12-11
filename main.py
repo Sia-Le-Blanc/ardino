@@ -67,7 +67,7 @@ def main():
     # OS별 포트 자동 설정
     system = platform.system()
     if system == "Darwin":  # Mac
-        port = "/dev/cu.usbmodem1401"
+        port = "/dev/cu.usbmodem11401"
     elif system == "Windows":
         port = "COM4"  # 필요시 수정
     else:  # Linux
@@ -75,6 +75,7 @@ def main():
     
     serial = SerialController(port=port)
     voice = VoiceRecognizer()
+    voice.set_serial(serial)  # 추가
     device = DeviceController(serial)
     sensor = SensorManager(serial)
     automation = Automation(device, sensor)

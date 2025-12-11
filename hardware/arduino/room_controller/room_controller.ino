@@ -65,6 +65,12 @@ void loop() {
       float bzFreq = strRead.substring(7, strRead.length()).toFloat();
       setBuzzer(bzFreq);
     }
+    else if (strRead.indexOf("TIME=") != -1)
+    {
+      int timeValue = strRead.substring(5, strRead.length()).toInt();
+      display.showNumber(timeValue);
+      Serial.println("OKTIME");
+    }
     else if (strRead.indexOf("FND=") != -1)
     {
       float fndValue = strRead.substring(4, strRead.length()).toFloat();
