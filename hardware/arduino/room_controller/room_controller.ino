@@ -1,132 +1,199 @@
-// hardware/arduino/room_controller.ino (실습 코드 기반)
+// room_controller.ino (4_10_3.ino 설정 기준 적용 버전)
 
 #include <Servo.h>
-#include <TM1637Display.h>
+#include <TM1637TinyDisplay.h>
+#include "DHT.h"
+#include <Adafruit_MLX90614.h>
 
-// 핀 정의
-#define DHT_PIN 2
+#define LED_RED 5
+#define LED_GREEN 6
+#define LED_BLUE  11
 #define SERVO_PIN 8
-#define RGB_R 5
-#define RGB_G 6
-#define RGB_B 11
-#define BUZZER_PIN 3
-#define TM_CLK 9
-#define TM_DIO 10
+#define PIEZO_BUZZER  3
+#define CLK 9
+#define DIO 10
+#define BUTTON_1 4
+#define BUTTON_2 7
+#define VR_PIN  A0
+#define BRIGHT_PIN  A1
+#define DHTPIN 2
 
-// 객체 초기화
-Servo lightServo;
-TM1637Display display(TM_CLK, TM_DIO);
-
-// DHT11 변수
-float temperature = 0.0;
-float humidity = 0.0;
+Servo myservo;
+TM1637TinyDisplay display(CLK, DIO);
+Adafruit_MLX90614 mlx = Adafruit_MLX90614();
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
 
 void setup() {
   Serial.begin(9600);
-  lightServo.attach(SERVO_PIN);
-  display.setBrightness(0x0f);
-  
-  pinMode(DHT_PIN, INPUT);
-  pinMode(RGB_R, OUTPUT);
-  pinMode(RGB_G, OUTPUT);
-  pinMode(RGB_B, OUTPUT);
-  pinMode(BUZZER_PIN, OUTPUT);
-  
-  setRGB(0, 0, 0);
-  noTone(BUZZER_PIN);
-  
-  Serial.println("Arduino Ready");
+  myservo.attach(SERVO_PIN);
+  display.setBrightness(BRIGHT_7);
+  pinMode(BUTTON_1, INPUT);
+  pinMode(BUTTON_2, INPUT);
+  mlx.begin();
+  dht.begin();
 }
 
 void loop() {
-  if (Serial.available()) {
-    String command = Serial.readStringUntil('\n');
-    command.trim();
-    executeCommand(command);
-  }
-  
-  delay(50);
-}
+  if (Serial.available() > 0)
+  {
+    String strRead = Serial.readStringUntil('\n');
+    if (strRead.indexOf("RGB=") != -1)
+    {
+      int commaIndex1 = strRead.indexOf(",");
+      int commaIndex2 = strRead.indexOf(",", commaIndex1 + 1);
 
-void executeCommand(String cmd) {
-  if (cmd.startsWith("RGB=")) {
-    int r, g, b;
-    sscanf(cmd.c_str(), "RGB=%d,%d,%d", &r, &g, &b);
-    r = constrain(r, 0, 255);
-    g = constrain(g, 0, 255);
-    b = constrain(b, 0, 255);
-    setRGB(r, g, b);
-  }
-  else if (cmd.startsWith("SERVO=")) {
-    int degree = cmd.substring(6).toInt();
-    degree = constrain(degree, 0, 180);
-    lightServo.write(degree);
-  }
-  else if (cmd.startsWith("BUZZER=")) {
-    int freq = cmd.substring(7).toInt();
-    if (freq > 0 && freq <= 5000) {
-      tone(BUZZER_PIN, freq);
-    } else {
-      noTone(BUZZER_PIN);
+      int redValue = strRead.substring(4, commaIndex1).toInt();
+      int greenValue = strRead.substring(commaIndex1 + 1, commaIndex2).toInt();
+      int blueValue = strRead.substring(commaIndex2 + 1, strRead.length()).toInt();
+
+      redLedSet(redValue, greenValue, blueValue);
+      Serial.println("OKRGB");
+    }
+    else if (strRead.indexOf("SERVO=") != -1)
+    {
+      int servoDigree = strRead.substring(6, strRead.length()).toInt();
+      if (servoDigree <= 180)
+      {
+        myservo.write(servoDigree);
+        Serial.println("OKSERVO");
+      }
+      else Serial.println("error digree");
+    }
+    else if (strRead.indexOf("BUZZER=") != -1)
+    {
+      float bzFreq = strRead.substring(7, strRead.length()).toFloat();
+      setBuzzer(bzFreq);
+    }
+    else if (strRead.indexOf("FND=") != -1)
+    {
+      float fndValue = strRead.substring(4, strRead.length()).toFloat();
+      display.showNumber(fndValue);
+      Serial.println("OKFND");
+    }
+    else if (strRead.indexOf("VR=?") != -1)
+    {
+      Serial.print("VR=");
+      Serial.println(analogRead(VR_PIN));
+    }
+    else if (strRead.indexOf("BRIGHT=?") != -1)
+    {
+      Serial.print("BRIGHT=");
+      Serial.println(analogRead(BRIGHT_PIN));
+    }
+    else if (strRead.indexOf("TEMPERATURE=?") != -1)
+    {
+      sendTemperature();
+    }
+    else if (strRead.indexOf("HUMIDITY=?") != -1)
+    {
+      sendHumidity();
+    }
+    else if (strRead.indexOf("OBJECT=?") != -1)
+    {
+      float objectTemp = mlx.readObjectTempC();
+      Serial.print("OBJECT=");
+      Serial.println(objectTemp);
+    }
+    else if (strRead.indexOf("AMBIENT=?") != -1)
+    {
+      float ambientTemp = mlx.readAmbientTempC();
+      Serial.print("AMBIENT=");
+      Serial.println(ambientTemp);
     }
   }
-  else if (cmd.startsWith("TIME=")) {
-    int timeValue = cmd.substring(5).toInt();
-    timeValue = constrain(timeValue, 0, 2359);
-    display.showNumberDecEx(timeValue, 0b01000000, true);
+
+  if (btn1() == 1) Serial.println("BUTTON1=CLICK");
+  if (btn2() == 1) Serial.println("BUTTON2=CLICK");
+}
+
+void redLedSet(int red, int green, int blue)
+{
+  analogWrite(LED_RED, red);
+  analogWrite(LED_GREEN, green);
+  analogWrite(LED_BLUE, blue);
+}
+
+void setBuzzer(int freq)
+{
+  if (freq > 31)
+  {
+    tone(PIEZO_BUZZER, freq);
+    Serial.println("OKBUZZER");
   }
-  else if (cmd == "TEMPERATURE=?") {
-    readDHT11();
+  else
+  {
+    noTone(PIEZO_BUZZER);
+    Serial.println("OKBUZZER");
+  }
+}
+
+int btn1()
+{
+  static int currBtn = 0;
+  static int prevBtn = 0;
+
+  currBtn = digitalRead(BUTTON_1);
+
+  if (currBtn != prevBtn)
+  {
+    prevBtn = currBtn;
+    if (currBtn == 1)
+    {
+      return 1;
+    }
+    delay(50);
+  }
+
+  return 0;
+}
+
+int btn2()
+{
+  static int currBtn = 0;
+  static int prevBtn = 0;
+
+  currBtn = digitalRead(BUTTON_2);
+
+  if (currBtn != prevBtn)
+  {
+    prevBtn = currBtn;
+    if (currBtn == 1)
+    {
+      return 1;
+    }
+    delay(50);
+  }
+
+  return 0;
+}
+
+void sendTemperature()
+{
+  float temperature = dht.readTemperature();
+  if (!isnan(temperature))
+  {
     Serial.print("TEMPERATURE=");
     Serial.println(temperature);
   }
-  else if (cmd == "HUMIDITY=?") {
-    readDHT11();
+  else
+  {
+    Serial.print("TEMPERATURE=");
+    Serial.println(0);
+  }
+}
+
+void sendHumidity()
+{
+  float humidity = dht.readHumidity();
+  if (!isnan(humidity))
+  {
     Serial.print("HUMIDITY=");
     Serial.println(humidity);
   }
-}
-
-void setRGB(int r, int g, int b) {
-  analogWrite(RGB_R, r);
-  analogWrite(RGB_G, g);
-  analogWrite(RGB_B, b);
-}
-
-void readDHT11() {
-  uint8_t data[5] = {0, 0, 0, 0, 0};
-  uint8_t cnt = 7;
-  uint8_t idx = 0;
-
-  pinMode(DHT_PIN, OUTPUT);
-  digitalWrite(DHT_PIN, LOW);
-  delay(18);
-  digitalWrite(DHT_PIN, HIGH);
-  delayMicroseconds(40);
-  pinMode(DHT_PIN, INPUT);
-
-  unsigned int loopCnt = 10000;
-  while(digitalRead(DHT_PIN) == LOW) if(loopCnt-- == 0) return;
-  
-  loopCnt = 10000;
-  while(digitalRead(DHT_PIN) == HIGH) if(loopCnt-- == 0) return;
-
-  for (int i = 0; i < 40; i++) {
-    loopCnt = 10000;
-    while(digitalRead(DHT_PIN) == LOW) if(loopCnt-- == 0) return;
-    
-    unsigned long t = micros();
-    
-    loopCnt = 10000;
-    while(digitalRead(DHT_PIN) == HIGH) if(loopCnt-- == 0) return;
-    
-    if ((micros() - t) > 40) data[idx] |= (1 << cnt);
-    if (cnt == 0) {
-      cnt = 7;
-      idx++;
-    } else cnt--;
+  else
+  {
+    Serial.print("HUMIDITY=");
+    Serial.println(0);
   }
-
-  humidity = data[0];
-  temperature = data[2];
 }

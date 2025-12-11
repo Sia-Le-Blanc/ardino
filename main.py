@@ -2,6 +2,7 @@
 
 import time
 import threading
+import platform
 from modules.serial_controller import SerialController
 from modules.voice_recognition import VoiceRecognizer
 from modules.device_controller import DeviceController
@@ -63,7 +64,16 @@ class VoiceThread(threading.Thread):
 def main():
     print("=== 스마트홈 시스템 시작 ===")
     
-    serial = SerialController()
+    # OS별 포트 자동 설정
+    system = platform.system()
+    if system == "Darwin":  # Mac
+        port = "/dev/cu.usbmodem1401"
+    elif system == "Windows":
+        port = "COM4"  # 필요시 수정
+    else:  # Linux
+        port = "/dev/ttyACM0"
+    
+    serial = SerialController(port=port)
     voice = VoiceRecognizer()
     device = DeviceController(serial)
     sensor = SensorManager(serial)
@@ -119,7 +129,7 @@ def main():
 
     except KeyboardInterrupt:
         print("\n\n=== 시스템 종료 ===")
-        time_manager.shutdown()  # 추가
+        time_manager.shutdown()
         voice_thread.stop()
         serial.close()
 

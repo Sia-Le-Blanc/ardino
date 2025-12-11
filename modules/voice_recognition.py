@@ -4,68 +4,94 @@ import sounddevice as sd
 import numpy as np
 from scipy.io.wavfile import write
 import speech_recognition as sr
-import google.generativeai as genai
+from google import genai
 from typing import Optional
 import tempfile
 import os
+import time
 
-GEMINI_API_KEY = "AIzaSyDkK6vre3W_TMJwKo8XxihUnmGjXc2_X7Q"
-genai.configure(api_key=GEMINI_API_KEY)
+GEMINI_API_KEY = "AIzaSyA4z7qP8NJgNOZYw76hJNbVpZIy3s3EShU"
+
 
 class VoiceRecognizer:
     def __init__(self):
         self.recognizer = sr.Recognizer()
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
         self.sample_rate = 16000
-    
-    def record_audio(self, duration):
-        """sounddevice로 녹음"""
-        audio = sd.rec(int(duration * self.sample_rate), 
-                      samplerate=self.sample_rate, 
-                      channels=1, 
-                      dtype='int16')
+        self.serial = None
+
+        # Gemini 클라이언트 (v1 기본값 사용, 별도 api_version 강제 X)
+        self.client = genai.Client(
+            api_key=GEMINI_API_KEY
+        )
+
+    def set_serial(self, serial_controller):
+        """시리얼 컨트롤러 설정"""
+        self.serial = serial_controller
+
+    def record_audio(self, duration: float):
+        """sounddevice로 duration(초)만큼 녹음"""
+        audio = sd.rec(
+            int(duration * self.sample_rate),
+            samplerate=self.sample_rate,
+            channels=1,
+            dtype="int16"
+        )
         sd.wait()
         return audio
-    
-    def audio_to_text(self, audio_data):
-        """오디오를 텍스트로 변환"""
-        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+
+    def audio_to_text(self, audio_data) -> str:
+        """오디오를 텍스트로 변환 (Google Speech Recognition 사용)"""
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             write(f.name, self.sample_rate, audio_data)
-            
+
             with sr.AudioFile(f.name) as source:
                 audio = self.recognizer.record(source)
-            
+
+        # 임시 파일 삭제
+        try:
             os.unlink(f.name)
-            text = self.recognizer.recognize_google(audio, language='ko-KR')
-            return text
-    
+        except Exception:
+            pass
+
+        text = self.recognizer.recognize_google(audio, language="ko-KR")
+        return text
+
     def play_beep(self):
-        """도-미-솔 신호음 출력"""
-        duration = 0.15
+        """아두이노 부저 또는 PC 스피커로 도-미-솔 신호음 출력"""
         frequencies = [523, 659, 784]
-        
-        for freq in frequencies:
-            t = np.linspace(0, duration, int(self.sample_rate * duration))
-            wave = np.sin(2 * np.pi * freq * t) * 0.3
-            sd.play(wave, self.sample_rate)
-            sd.wait()
-    
+        duration = 0.15
+
+        if self.serial:
+            # 아두이노 부저 사용
+            for freq in frequencies:
+                self.serial.send_buzzer(freq)
+                time.sleep(duration)
+            self.serial.send_buzzer(0)
+        else:
+            # 시리얼 없으면 PC 스피커
+            for freq in frequencies:
+                t = np.linspace(0, duration, int(self.sample_rate * duration))
+                wave = np.sin(2 * np.pi * freq * t) * 0.3
+                sd.play(wave, self.sample_rate)
+                sd.wait()
+
     def listen_for_trigger(self) -> bool:
-        """트리거 워드 감지 (main.py에서 호출)"""
+        """트리거 워드(준호, 주노 등) 감지"""
         try:
             audio = self.record_audio(duration=3)
             text = self.audio_to_text(audio)
-            
+            # print(f"[DEBUG] 트리거 인식 텍스트: {text}")
+
             if any(word in text for word in ["준호", "주노", "존호", "전호"]):
                 print(f"✓ 트리거 감지: {text}")
                 self.play_beep()
                 return True
-        except:
-            pass
+        except Exception as e:
+            print(f"❌ 트리거 인식 실패: {e}")
         return False
-    
+
     def recognize_command(self) -> Optional[str]:
-        """명령 인식 및 해석 (main.py에서 호출)"""
+        """트리거 이후 실제 명령 인식 및 분류"""
         try:
             audio = self.record_audio(duration=5)
             text = self.audio_to_text(audio)
@@ -74,9 +100,10 @@ class VoiceRecognizer:
         except Exception as e:
             print(f"❌ 인식 실패: {e}")
             return None
-    
+
     def interpret_with_gemini(self, user_command: str) -> str:
-        """Gemini로 명령 정교하게 해석"""
+        """Gemini로 명령 정교하게 해석 → 9가지 명령 중 하나로 매핑"""
+
         prompt = f"""
 당신은 스마트홈 음성 비서의 명령 분류 전문 AI입니다.
 사용자의 한국어 음성 명령을 분석하여, 정확히 하나의 제어 명령으로 분류하세요.
@@ -85,157 +112,104 @@ class VoiceRecognizer:
 1. 반드시 9가지 명령 중 정확히 하나만 출력
 2. 기기명과 동작(켜기/끄기)이 명확해야 함
 3. 애매하거나 지원하지 않는 명령은 모두 UNKNOWN
-4. 출력은 명령어만 (설명 없음)
+4. 출력은 명령어만 (설명, 이유, 마크다운, 따옴표 일체 금지)
 
-## 사용자 입력
-"{user_command}"
+## 가능한 출력 명령 목록
+- LIGHT_ON
+- LIGHT_OFF
+- HUM_ON
+- HUM_OFF
+- AC_ON
+- AC_OFF
+- LED_ON
+- LED_OFF
+- UNKNOWN
 
-## 명령어 분류 규칙
+## 세부 규칙
 
 ### 1. LIGHT_ON
-**조건:**
 - 대상: "조명", "불", "전등", "라이트", "등", "Light"
 - 동작: "켜", "틀어", "켜줘", "켜라", "on", "온"
 - 예시: "불 켜줘", "조명 켜", "라이트 온", "등 좀 켜", "전등 틀어줘"
-**제외:**
-- "상태등", "LED" 언급 시 → LED_ON 우선
+- 단, "상태등", "LED", "엘이디", "표시등"이 함께 나오면 → LED_ON
 
 ### 2. LIGHT_OFF
-**조건:**
 - 대상: "조명", "불", "전등", "라이트", "등", "Light"
 - 동작: "꺼", "끄", "꺼줘", "끄기", "off", "오프"
 - 예시: "불 꺼", "조명 꺼줘", "라이트 오프", "등 끄기", "전등 꺼"
-**제외:**
-- "상태등", "LED" 언급 시 → LED_OFF 우선
+- 단, "상태등", "LED", "엘이디", "표시등"이 함께 나오면 → LED_OFF
 
 ### 3. HUM_ON
-**조건:**
-- 대상: "가습기", "습도", "humidifier"
+- 대상: "가습기", "humidifier"
 - 동작: "켜", "틀어", "켜줘", "작동", "on"
-- 예시: "가습기 켜", "가습기 틀어", "습도 올려", "가습기 작동"
-**주의:**
-- "가습기" 명시적 언급 필수
-- "습하게" 같은 모호한 표현 → UNKNOWN
+- 예시: "가습기 켜", "가습기 틀어", "가습기 작동"
+- "습도 올려"처럼 모호하고 "가습기" 언급 없으면 → UNKNOWN
 
 ### 4. HUM_OFF
-**조건:**
 - 대상: "가습기", "humidifier"
 - 동작: "꺼", "끄", "정지", "중지", "off"
 - 예시: "가습기 꺼", "가습기 끄기", "가습기 정지"
 
 ### 5. AC_ON
-**조건:**
 - 대상: "에어컨", "냉방", "AC", "에어콘", "airconditioner"
-- 동작: "켜", "틀어", "작동", "on"
-- 또는: "시원하게", "춥게", "온도 낮춰" (냉방 의도 명확)
+- 동작: "켜", "틀어", "켜줘", "작동", "on"
+- 또는: "시원하게", "춥게", "온도 낮춰" 등 냉방 의도가 분명한 표현
 - 예시: "에어컨 켜", "냉방 틀어", "시원하게 해줘", "춥게 해줘"
-**제외:**
-- 단순 "온도 낮춰" (구체적 수치 없음) → UNKNOWN
 
 ### 6. AC_OFF
-**조건:**
 - 대상: "에어컨", "냉방", "AC"
 - 동작: "꺼", "끄", "정지", "off"
 - 예시: "에어컨 꺼", "냉방 끄기", "에어컨 정지"
 
 ### 7. LED_ON
-**조건:**
 - 대상: "상태등", "LED", "엘이디", "표시등", "인디케이터"
-- 동작: "켜", "틀어", "on"
+- 동작: "켜", "틀어", "켜줘", "on"
 - 예시: "LED 켜", "상태등 켜줘", "엘이디 온"
-**우선순위:**
-- "LED"/"상태등" 명시 시 일반 조명보다 우선
+- 일반 조명보다 우선
 
 ### 8. LED_OFF
-**조건:**
 - 대상: "상태등", "LED", "엘이디", "표시등"
-- 동작: "꺼", "끄", "off"
+- 동작: "꺼", "끄", "꺼줘", "off"
 - 예시: "LED 꺼", "상태등 끄기"
 
-### 9. UNKNOWN
-**다음의 경우 반드시 UNKNOWN:**
+### 9. UNKNOWN (반드시 UNKNOWN 처리해야 하는 경우)
+- 기기명이 전혀 없는 "켜줘", "꺼줘", "작동해줘" 등
+- "온도 조절해줘", "쾌적하게 해줘"처럼 추상적인 표현
+- TV, 보일러, 커튼, 창문, 스피커, 음악 등 지원하지 않는 기기
+- 인사/감사/질문/잡담
+- "불 켜고 에어컨도 켜줘" 같은 복합 명령
 
-**A. 기기명 없음**
-- "켜줘", "틀어줘", "작동해줘" (뭘 켤지 불명확)
-- "꺼", "끄기", "정지" (뭘 끌지 불명확)
+## 현재 사용자 입력
+"{user_command}"
 
-**B. 동작 불명확**
-- "온도 높여", "온도 조절" (구체적 기기 없음)
-- "습도 맞춰", "쾌적하게" (추상적)
-- "밝게", "어둡게" (조명인지 화면인지 불명확)
+위 규칙에 따라 9가지 명령 중 하나를 고르고,
+아래에 그 명령어만 대문자로 한 줄 출력하세요.
+"""
 
-**C. 지원하지 않는 기기**
-- "TV", "선풍기", "청소기", "보일러", "커튼", "블라인드"
-- "난방", "히터", "환풍기", "공기청정기"
-
-**D. 질문/대화**
-- "몇 시야?", "날씨 어때?", "온도가 어떻게 돼?"
-- "지금 뭐 켜져 있어?", "상태 알려줘"
-
-**E. 인사/감사/잡담**
-- "안녕", "고마워", "잘했어", "좋아"
-- "알았어", "오케이", "그래", "응"
-
-**F. 모호한 지시**
-- "저것 좀", "그거 해줘", "그냥 켜"
-- "다 켜", "전부 꺼" (무엇을 가리키는지 불명확)
-
-**G. 복합 명령**
-- "불 켜고 에어컨도 켜줘" → UNKNOWN (하나만 처리 가능)
-- "다 꺼줘" → UNKNOWN (여러 기기 동시 제어 불가)
-
-## 특수 케이스
-
-### 오인식 대응
-- "불 커" → LIGHT_ON (받침 누락)
-- "에어컨 커줘" → AC_ON (표준어 아님)
-- "LED 커" → LED_ON
-
-### 자연어 처리
-- "좀 시원하게 해줘" → AC_ON (명확한 냉방 의도)
-- "춥게 해" → AC_ON
-- "가습기 좀 돌려" → HUM_ON
-
-### 경계 케이스
-- "등 켜" → LIGHT_ON (일반 조명)
-- "상태등 켜" → LED_ON (상태등 우선)
-- "불 다 꺼" → LIGHT_OFF (조명 끄기로 해석)
-
-## 출력 형식
-- 위 9가지 중 하나만 출력
-- 대문자로 출력
-- 언더스코어(_) 포함
-- 설명, 이유, 기타 텍스트 일체 금지
-
-## 분류 프로세스
-1. 기기명 식별: 조명/에어컨/가습기/LED/없음
-2. 동작 식별: 켜기/끄기/불명확
-3. 조건 충족 확인
-4. 애매하면 → UNKNOWN
-
-## 현재 입력 분석
-사용자 입력: "{user_command}"
-→ 명령어:
-    """
-    
         try:
-            response = self.model.generate_content(prompt)
+            response = self.client.models.generate_content(
+                # ✅ v1에서 공식 지원되는 안정 모델
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+
             command = response.text.strip().upper()
-            
+            # print(f"[DEBUG] Gemini 응답: {command}")
+
             valid_commands = [
-                "LIGHT_ON", "LIGHT_OFF", 
+                "LIGHT_ON", "LIGHT_OFF",
                 "HUM_ON", "HUM_OFF",
                 "AC_ON", "AC_OFF",
                 "LED_ON", "LED_OFF",
-                "UNKNOWN"
+                "UNKNOWN",
             ]
-            
+
             if command in valid_commands:
                 return command
             else:
                 print(f"[GEMINI] 잘못된 응답: {command} → UNKNOWN 처리")
                 return "UNKNOWN"
-                
+
         except Exception as e:
             print(f"❌ Gemini 오류: {e}")
             return "UNKNOWN"
