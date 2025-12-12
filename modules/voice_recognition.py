@@ -80,14 +80,13 @@ class VoiceRecognizer:
         try:
             audio = self.record_audio(duration=3)
             text = self.audio_to_text(audio)
-            # print(f"[DEBUG] 트리거 인식 텍스트: {text}")
 
             if any(word in text for word in ["준호", "주노", "존호", "전호"]):
                 print(f"✓ 트리거 감지: {text}")
                 self.play_beep()
                 return True
-        except Exception as e:
-            print(f"❌ 트리거 인식 실패: {e}")
+        except Exception:
+            pass 
         return False
 
     def recognize_command(self) -> Optional[str]:

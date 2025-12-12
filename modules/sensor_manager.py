@@ -27,7 +27,7 @@ class SensorManager:
                         if -50 <= temp <= 100:
                             self.temperature = temp
                             self.error_count = 0
-                            print(f"✓ 온도: {temp}°C")
+                            #print(f"✓ 온도: {temp}°C")
                             break
                     except (ValueError, IndexError) as e:
                         print(f"⚠️ 온도 파싱 실패: {response}")
@@ -47,7 +47,7 @@ class SensorManager:
                         if 0 <= hum <= 100:
                             self.humidity = hum
                             self.error_count = 0
-                            print(f"✓ 습도: {hum}%")
+                            #print(f"✓ 습도: {hum}%")
                             break
                     except (ValueError, IndexError) as e:
                         print(f"⚠️ 습도 파싱 실패: {response}")
